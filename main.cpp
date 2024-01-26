@@ -6,7 +6,9 @@
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 const int GRID_SIZE = 20;
-const int NUM_OBSTACLES = 5;
+const int NUM_OBSTACLES = 10;
+const int BONUS_FOOD_SIZE = 30;
+const int INITIAL_SNAKE_SPEED = 150;
 
 struct SnakeSegment {
     int x, y;
@@ -17,6 +19,7 @@ struct Obstacle {
 };
 
 enum class Direction { UP, DOWN, LEFT, RIGHT };
+enum class Game_State {Menu, Running, Game_Over};
 
 class SnakeGame {
 public:
@@ -24,7 +27,8 @@ public:
     ~SnakeGame();
     void run();
 
-//public:
+private:
+    Game_State game_state;
     void initialize();
     void close();
     void handleInput();
@@ -39,8 +43,8 @@ public:
 	void updateGameOverTimer();
 
    
-    SDL_Window* window;
-    SDL_Renderer* renderer;
+    SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
     std::vector<SnakeSegment> snake;
     std::vector<Obstacle> obstacles;
     SDL_Point food;
@@ -57,11 +61,14 @@ public:
 	int foodsEaten=0;
 	int bonusFoodTimer=0;
 	int gameOverTimer=0;
+    int snake_speed = INITIAL_SNAKE_SPEED;
 
 };
 
-SnakeGame::SnakeGame() : window(nullptr), renderer(nullptr){
+SnakeGame::SnakeGame(){
     initialize();
+
+    game_state = Game_State::Menu;
 }
 
 SnakeGame::~SnakeGame() {
@@ -88,7 +95,7 @@ void SnakeGame::initialize() {
     }
 
     
-    snake.push_back({SCREEN_WIDTH/2 , SCREEN_HEIGHT/2 });
+    snake.push_back({SCREEN_WIDTH /2, SCREEN_HEIGHT/2 });
     direction = Direction::UP;
 
     
@@ -104,11 +111,13 @@ void SnakeGame::close() {
 }
 
 void SnakeGame::run() {
+   
+
     while (!gameOver) {
         handleInput();
         update();
         render();
-        SDL_Delay(150);
+        SDL_Delay(snake_speed);
     }
 
 	
@@ -120,9 +129,7 @@ void SnakeGame::run() {
         updateGameOverTimer();
         SDL_Delay(150);
 	}
-    
 
-	
 }
 
 void SnakeGame::handleInput() {
@@ -131,96 +138,119 @@ void SnakeGame::handleInput() {
         if (e.type == SDL_QUIT) {
             gameOver = true;
         } else if (e.type == SDL_KEYDOWN) {
-            switch (e.key.keysym.sym) {
-                case SDLK_UP:
-                    if (direction != Direction::DOWN) direction = Direction::UP;
-                    break;
-                case SDLK_DOWN:
-                    if (direction != Direction::UP) direction = Direction::DOWN;
-                    break;
-                case SDLK_LEFT:
-                    if (direction != Direction::RIGHT) direction = Direction::LEFT;
-                    break;
-                case SDLK_RIGHT:
-                    if (direction != Direction::LEFT) direction = Direction::RIGHT;
-                    break;
+            if (game_state == Game_State::Menu) {
+                
+                game_state = Game_State::Running;
+            } else if (game_state == Game_State::Running) {
+        
+                switch (e.key.keysym.sym) {
+                    case SDLK_UP:
+                        if (direction != Direction::DOWN) direction = Direction::UP;
+                        break;
+                    case SDLK_DOWN:
+                        if (direction != Direction::UP) direction = Direction::DOWN;
+                        break;
+                    case SDLK_LEFT:
+                        if (direction != Direction::RIGHT) direction = Direction::LEFT;
+                        break;
+                    case SDLK_RIGHT:
+                        if (direction != Direction::LEFT) direction = Direction::RIGHT;
+                        break;
+                }
+            } else if (game_state == Game_State::Game_Over) {
+                
+                if (e.key.keysym.sym == SDLK_RETURN) {
+                    initialize();  
+                }
             }
         }
     }
 }
 
 void SnakeGame::update() {
-    // Move the snake
-    int dx = 0, dy = 0;
-    switch (direction) {
-        case Direction::UP:
-            dy = -GRID_SIZE;
-            break;
-        case Direction::DOWN:
-            dy = GRID_SIZE;
-            break;
-        case Direction::LEFT:
-            dx = -GRID_SIZE;
-            break;
-        case Direction::RIGHT:
-            dx = GRID_SIZE;
-            break;
-    }
-
+    if (game_state == Game_State::Running) {
     
-    for (int i = snake.size() - 1; i > 0; --i) {
-        snake[i] = snake[i - 1];
-    }
-
-    
-    snake[0].x += dx;
-    snake[0].y += dy;
-
-
-
-    if (checkCollision()) {
-        gameOver = true;
-        return;
-    }
-
-    
-    if (snake[0].x == food.x && snake[0].y == food.y) {
-        
-        spawnFood();
-        snake.push_back({-1, -1});  
-        score++;
-        foodsEaten++;
-
-        if (foodsEaten % 5 == 0) {
-            
-            spawnBonusFood();
-            bonusFoodTimer = 3000;  
+        int dx = 0, dy = 0;
+        switch (direction) {
+            case Direction::UP:
+                dy = -GRID_SIZE;
+                break;
+            case Direction::DOWN:
+                dy = GRID_SIZE;
+                break;
+            case Direction::LEFT:
+                dx = -GRID_SIZE;
+                break;
+            case Direction::RIGHT:
+                dx = GRID_SIZE;
+                break;
         }
-    }
 
-
-    if (snake[0].x == bonusFood.x && snake[0].y == bonusFood.y) {
         
-        snake.push_back({-1, -1});
-        score += 5; 
-        bonusFoodTimer = 0; 
-    }
+        for (int i = snake.size() - 1; i > 0; --i) {
+            snake[i] = snake[i - 1];
+        }
+        snake[0].x += dx;
+        snake[0].y += dy;
+
+        
+        if (checkCollision()) {
+        
+            game_state = Game_State::Game_Over;
+            return;
+        }
 
     
-    updateBonusFoodTimer();
+        if (snake[0].x == food.x && snake[0].y == food.y) {
+            
+            score+=5;
+            foodsEaten++;
+            snake_speed -= 7;
 
+            if (foodsEaten % 5 == 0) {
+                
+                spawnBonusFood();
+                bonusFoodTimer = 5000;
+            }
 
+            spawnFood();
+            snake.push_back({-1, -1});
+        }
+
+        
+        if (snake[0].x == bonusFood.x && snake[0].y == bonusFood.y) {
+            
+            snake.push_back({-1, -1});
+            score += 10;
+            bonusFoodTimer = 0;
+        }
+
+        
+        updateBonusFoodTimer();
+    } else if (game_state == Game_State::Game_Over) {
+    
+        SDL_Color textColor = {255, 255, 255, 255};
+        std::string gameOverText = "Game Over! Score: " + std::to_string(score);
+        renderText(gameOverText, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, textColor);
+
+        
+        updateGameOverTimer();
+    }
 }
+
 
 void SnakeGame::updateBonusFoodTimer() {
     if (bonusFoodTimer > 0) {
-        bonusFoodTimer -= 150;  
+        bonusFoodTimer -= 150; 
+        bonusFoodTimer-=snake_speed; 
         if (bonusFoodTimer <= 0) {
             
             bonusFoodTimer = 0;
         }
     }
 }
+
+
 
 void SnakeGame::renderGameOver() {
     SDL_Color textColor = {255, 255, 255, 255};
@@ -278,47 +308,49 @@ void SnakeGame::render() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-	if(!gameOver)
-	{
-		
-    SDL_SetRenderDrawColor(renderer, 128, 128, 128, 255);
-    for (const auto& obstacle : obstacles) {
-        SDL_Rect rect = {obstacle.x, obstacle.y, GRID_SIZE, GRID_SIZE};
-        SDL_RenderFillRect(renderer, &rect);
+    if (game_state == Game_State::Menu) {
+       
+        SDL_Color textColor = {255, 255, 255, 255};
+        renderText("     SNAKE GAME     ", SCREEN_WIDTH / 4, SCREEN_HEIGHT / 4, textColor);
+        renderText("Press any key to start", SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, textColor);
+    } else if (game_state == Game_State::Running) {
+        
+        SDL_SetRenderDrawColor(renderer, 128, 128, 128, 255);
+        for (const auto& obstacle : obstacles) {
+            SDL_Rect rect = {obstacle.x, obstacle.y, GRID_SIZE, GRID_SIZE};
+            SDL_RenderFillRect(renderer, &rect);
+        }
+
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        for (const auto& segment : snake) {
+            SDL_Rect rect = {segment.x, segment.y, GRID_SIZE, GRID_SIZE};
+            SDL_RenderFillRect(renderer, &rect);
+        }
+
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        SDL_Rect foodRect = {food.x, food.y, GRID_SIZE, GRID_SIZE};
+        SDL_RenderFillRect(renderer, &foodRect);
+
+        if (bonusFoodTimer > 0) {
+            SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
+            SDL_Rect bonusFoodRect = {bonusFood.x, bonusFood.y, BONUS_FOOD_SIZE, BONUS_FOOD_SIZE};
+            SDL_RenderFillRect(renderer, &bonusFoodRect);
+        }
+
+        SDL_Color textColor = {255, 255, 255, 255};
+        std::string scoreText = "Score: " + std::to_string(score);
+        renderText(scoreText, 10, 10, textColor);
+
+    } else if (game_state == Game_State::Game_Over) {
+        
+        SDL_Color textColor = {255, 255, 255, 255};
+        std::string gameOverText = "Game Over! Score: " + std::to_string(score);
+        renderText(gameOverText, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, textColor);
     }
 
-    
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    for (const auto& segment : snake) {
-        SDL_Rect rect = {segment.x, segment.y, GRID_SIZE, GRID_SIZE};
-        SDL_RenderFillRect(renderer, &rect);
-    }
-
-    
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    SDL_Rect foodRect = {food.x, food.y, GRID_SIZE, GRID_SIZE};
-    SDL_RenderFillRect(renderer, &foodRect);
-
-    
-    if (bonusFoodTimer > 0) {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
-        SDL_Rect bonusFoodRect = {bonusFood.x, bonusFood.y, GRID_SIZE, GRID_SIZE};
-        SDL_RenderFillRect(renderer, &bonusFoodRect);
-    }
-
-	SDL_Color textColor = {255, 255, 255, 255};
-    std::string scoreText = "Score: " + std::to_string(score);
-    renderText(scoreText, 10, 10, textColor);
-	}
-
-	else
-	{
-		renderGameOver();
-	}
-
-    
     SDL_RenderPresent(renderer);
 }
+
 
 void SnakeGame::spawnFood() {
     
